@@ -40,37 +40,43 @@ class User {
       throw new AppError("User not found", 404);
     }
     const isTheSamePassword = await bcrypt.compare(
-      user.password,
-      newDataUser.password
+      newDataUser.password,
+      user.password
     );
-    if (
+    // Verifica si hay cambios o no, evitando hacer cambios en la BD innecesariamente
+    const noChangesDetected =
       user.username === newDataUser.username &&
       user.name === newDataUser.name &&
-      isTheSamePassword
-    ) {
+      isTheSamePassword;
+
+    if (noChangesDetected) {
       throw new AppError("No changes detected");
     }
-    const isUsernameTaken = User.getUserByUsernameStrict(this.username);
-    if (isUsernameTaken) {
+    // Verifica si el username ya está en uso
+    try {
+      User.getUserByUsernameStrict(newDataUser.username);
       throw new AppError("Username already taken", 409);
+    } catch (err) {
+      if (err.statusCode !== 404) throw err; // otro error inesperado
     }
-    const stmt = db.prepare(
-      "UPDATE users SET name = ?, username = ?, password = ? WHERE id = ?"
-    );
+    // Hashea la password
     const hashedPassword = await bcrypt.hash(newDataUser.password, 10);
-    const result = stmt.run(
-      newDataUser.name,
-      newDataUser.username,
-      hashedPassword,
-      idUser
-    );
+    const result = db
+      .prepare(
+        "UPDATE users SET name = ?, username = ?, password = ? WHERE id = ?"
+      )
+      .run(newDataUser.name, newDataUser.username, hashedPassword, idUser);
     return result.lastInsertRowid;
   }
   async save() {
-    const isUsernameTaken = User.getUserByUsernameStrict(this.username);
-    if (isUsernameTaken) {
+    // Verifica si el username ya esta en uso
+    try {
+      User.getUserByUsernameStrict(this.username);
       throw new AppError("Username already taken", 409);
+    } catch (err) {
+      if (err.statusCode !== 404) throw err; // otro error inesperado
     }
+    // Hashea la password
     const hashedPassword = await bcrypt.hash(this.password, 10);
     const idUserCreated = db
       .prepare("INSERT INTO users (name, username, password) VALUES (?, ?, ?)")
@@ -94,6 +100,7 @@ class User {
         404
       );
     }
+    // Compara las contraseñas
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
     if (!isPasswordCorrect) {
       throw new AppError(
@@ -101,6 +108,8 @@ class User {
         404
       );
     }
+
+    // Crea la firma, y la devuelve.
     const secretKey = "ALO_HIHI";
     const token = jwt.sign({ id: user.id }, secretKey, {
       expiresIn: "30min",
