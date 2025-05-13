@@ -40,7 +40,7 @@ class UserController {
         sameSite: "strict",
         maxAge: 1800000,
       });
-      res.status(200).json({ message: "User created succesfully" });
+      res.status(200).json({ message: "User created succesfully", token });
     } catch (err) {
       next(err);
     }
